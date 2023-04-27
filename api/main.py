@@ -91,7 +91,7 @@ async def map(
 
     return results
 
-@app.get("/timseries/{variable}/{network}/{model}/{region}/{years}/{season}")
+@app.get("/timeseries/{variable}/{network}/{model}/{region}/{years}/{season}")
 async def timeseries(
     variable: str = Path(title="Variable", description="Variable (e.g.: od550aer)"),
     network: str = Path(title="Network", description="Observation Network (e.g.: AERONET_V3_Level15)"),
@@ -130,5 +130,22 @@ async def timeseries(
     
     # close connection
     connection.close()
+
+    return results
+
+@app.get("/table/{variable}/{network}/{model}/{region}/{years}/{season}")
+async def table(
+    variable: str = Path(title="Variable", description="Variable (e.g.: od550aer)"),
+    network: str = Path(title="Network", description="Observation Network (e.g.: AERONET_V3_Level15)"),
+    model: str = Path(title="Model", description="Model (e.g.: cIFS-12UTC_o-suite)"),
+    region: str = Path(title="region", description="region (e.g.: ALL)"),
+    years: str = Path(title="years", description="years (e.g.: 2022-2023)"),
+    season: str = Path(title="season", description="season (e.g.: ALL)"),
+):
+    """
+    Get contingency table for a given variable, model, region and time period.
+    """
+
+    results = []
 
     return results
