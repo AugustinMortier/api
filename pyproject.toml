@@ -1,12 +1,14 @@
 [tool.poetry]
 name = "api"
 version = "0.1.0"
-description = ""
+description = "API for Aerosol Alerts Service Evaluation DB"
 authors = ["augustinm <augustinm@met.no>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.10"
+fastapi = "^0.95.1"
+uvicorn = "^0.21.1"
 
 
 [build-system]
