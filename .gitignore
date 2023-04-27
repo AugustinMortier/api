@@ -1,3 +1,4 @@
 data/
 dev.ipynb
 poetry.lock
+api/__py__cache/
