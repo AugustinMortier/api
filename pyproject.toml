@@ -9,6 +9,9 @@ readme = "README.md"
 python = "^3.10"
 uvicorn = "^0.21.1"
 fastapi = "^0.95.1"
+polars = "^0.17.9"
+connectorx = "^0.3.1"
+pyarrow = "^11.0.0"
 
 
 [tool.poetry.group.dev.dependencies]

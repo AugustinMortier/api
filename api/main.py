@@ -6,6 +6,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Union
 
+import polars as pl
 import sqlite3
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -61,33 +62,20 @@ async def map(
 
     # connect to database
     DATABASE_URL = Path(BASE_DIR) / "alerts.sqlite"
-    connection = sqlite3.connect(DATABASE_URL)
-
-    # create cursor
-    cursor = connection.cursor()
-
-    # get list of stations in region for variable
-    get_stations = """SELECT station FROM regions WHERE var = ? AND network = ? AND region = ?"""
-    params = (variable, network, region)
-    stations = cursor.execute(get_stations, params).fetchall()
+    get_stations = f"""SELECT station FROM regions WHERE var = '{variable}' AND network = '{network}' AND region = '{region}'"""
+    stations = pl.read_database(query=get_stations, connection_uri=f"sqlite://{DATABASE_URL}")
 
     # get time series of selected stations
     results = []
-    for station in stations:
-        # get coordinates of selected station
-        get_coordinates  = """SELECT latitude, longitude FROM coordinates WHERE station = ? AND var = ? AND network = ?"""
-        params = (station[0], variable, network)
-        coordinates = cursor.execute(get_coordinates, params).fetchall()
-
+    for station in stations.rows():
+        get_coordinates  = f"""SELECT latitude, longitude FROM coordinates WHERE station = '{station[0]}' AND var = '{variable}' AND network = '{network}'"""
+        coordinates = pl.read_database(query=get_coordinates, connection_uri=f"sqlite://{DATABASE_URL}")
 
         results.append({
             "station_name": station[0],
-            "latitude": coordinates[0][0],
-            "longitude": coordinates[0][1],
+            "latitude": coordinates['latitude'][0],
+            "longitude": coordinates['longitude'][0],
         })
-    
-    # close connection
-    connection.close()
 
     return results
 
