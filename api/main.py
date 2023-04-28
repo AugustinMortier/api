@@ -12,7 +12,7 @@ from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from api.utils import *
+from api.utils import get_classification
 
 BASE_DIR = Path("data")
 
@@ -50,10 +50,10 @@ async def root(request: Request):
     }
 
 
-@app.get("/map/{variable}/{network}/{region}")
+@app.get("/map/{variable}/{source}/{region}")
 async def map(
     variable: str = Path(title="Variable", description="Variable (e.g.: od550aer)"),
-    network: str = Path(title="Network", description="Observation Network (e.g.: AERONET_V3_Level15)"),
+    source: str = Path(title="source", description="Observation source (e.g.: AERONET_V3_Level15)"),
     region: str = Path(title="region", description="region (e.g.: ALL)")
 ):
     """
@@ -62,13 +62,13 @@ async def map(
 
     # connect to database
     DATABASE_URL = Path(BASE_DIR) / "alerts.sqlite"
-    get_stations = f"""SELECT station FROM regions WHERE var = '{variable}' AND network = '{network}' AND region = '{region}'"""
+    get_stations = f"""SELECT station FROM regions WHERE var = '{variable}' AND source = '{source}' AND region = '{region}'"""
     stations = pl.read_database(query=get_stations, connection_uri=f"sqlite://{DATABASE_URL}")
 
     # get time series of selected stations
     results = []
     for station in stations.rows():
-        get_coordinates  = f"""SELECT latitude, longitude FROM coordinates WHERE station = '{station[0]}' AND var = '{variable}' AND network = '{network}'"""
+        get_coordinates  = f"""SELECT latitude, longitude FROM coordinates WHERE station = '{station[0]}' AND var = '{variable}' AND source = '{source}'"""
         coordinates = pl.read_database(query=get_coordinates, connection_uri=f"sqlite://{DATABASE_URL}")
 
         results.append({
@@ -82,49 +82,55 @@ async def map(
 @app.get("/timeseries/{variable}/{network}/{model}/{region}/{years}/{season}")
 async def timeseries(
     variable: str = Path(title="Variable", description="Variable (e.g.: od550aer)"),
-    network: str = Path(title="Network", description="Observation Network (e.g.: AERONET_V3_Level15)"),
+    network: str = Path(title="Network", description="Observation network (e.g.: AERONET_V3_Level15)"),
     model: str = Path(title="Model", description="Model (e.g.: cIFS-12UTC_o-suite)"),
-    region: str = Path(title="region", description="region (e.g.: ALL)"),
-    years: str = Path(title="years", description="years (e.g.: 2022-2023)"),
-    season: str = Path(title="season", description="season (e.g.: ALL)"),
+    region: str = Path(title="Region", description="region (e.g.: ALL)")
 ):
     """
     Get time series for a given variable, model, region and time period.
     """
 
-    # connect to database
-    DATABASE_URL = Path(BASE_DIR) / "alerts.sqlite"
-    connection = sqlite3.connect(DATABASE_URL)
+    # get relevant stations
+    get_stations = f"""SELECT station FROM regions WHERE var = '{variable}' AND source = '{network}' AND region = '{region}'"""
+    stations = pl.read_database(query=get_stations, connection_uri=f"sqlite://{DATABASE_URL}")
 
-    # create cursor
-    cursor = connection.cursor()
+    # get time series for selected stations
+    for i, station in enumerate(stations.rows()):
+        get_obs_alert  = f"""SELECT time, alert AS obs_alert FROM alerts WHERE station = '{station[0]}' AND var = '{variable}' AND source = '{network}'"""
+        obs_alert = pl.read_database(query=get_obs_alert, connection_uri=f"sqlite://{DATABASE_URL}")
 
-    # get list of stations in region for variable
-    get_stations = """SELECT station FROM regions WHERE var = ? AND network = ? AND region = ?"""
-    params = (variable, network, region)
-    stations = cursor.execute(get_stations, params).fetchall()
+        get_mod_alert  = f"""SELECT time, alert AS mod_alert FROM alerts WHERE station = '{station[0]}' AND var = '{variable}' AND source = '{model}'"""
+        mod_alert = pl.read_database(query=get_mod_alert, connection_uri=f"sqlite://{DATABASE_URL}")
+        
+        # merge databases
+        both_alert = obs_alert.join(mod_alert, on="time")
 
-    # get time series of selected stations
+        # check if dataframe is not empty
+        if both_alert.shape[0] == 0:
+            continue
+
+        # classify alerts as TP/TN/FP/FN
+        classes = both_alert.with_columns([ 
+            pl.struct(["obs_alert", "mod_alert"]).apply(get_classification)
+            .alias(station[0])
+        ]).drop("obs_alert", "mod_alert")
+
+        # merge dataframes
+        if i == 0:
+            all_classes = classes
+        else:
+            all_classes = all_classes.join(classes, on="time", how="outer")
+
+
+    # count number of classes for each time
     results = []
-    for station in stations:
-
-
-
-        results.append({
-            "station_name": station[0],
-            "latitude": coordinates[0][0],
-            "longitude": coordinates[0][1],
-        })
-    
-    # close connection
-    connection.close()
 
     return results
 
-@app.get("/table/{variable}/{network}/{model}/{region}/{years}/{season}")
+@app.get("/table/{variable}/{source}/{model}/{region}/{years}/{season}")
 async def table(
     variable: str = Path(title="Variable", description="Variable (e.g.: od550aer)"),
-    network: str = Path(title="Network", description="Observation Network (e.g.: AERONET_V3_Level15)"),
+    source: str = Path(title="source", description="Observation source (e.g.: AERONET_V3_Level15)"),
     model: str = Path(title="Model", description="Model (e.g.: cIFS-12UTC_o-suite)"),
     region: str = Path(title="region", description="region (e.g.: ALL)"),
     years: str = Path(title="years", description="years (e.g.: 2022-2023)"),
