@@ -121,11 +121,16 @@ async def timeseries(
         else:
             all_classes = all_classes.join(classes, on="time", how="outer")
 
+    # count number of occurrences of each class for each timestamp
+    categories = ["TP", "TN", "FP", "FN"]
+    for category in categories:
+        all_classes = all_classes.with_columns(
+            all_classes.apply(lambda x: x.count(category))
+        ).rename({"apply": category}) #there must be a smarter way to do this
 
-    # count number of classes for each time
-    results = []
+    # return only columns of interest
+    return all_classes.select(pl.col(["time", *categories]))
 
-    return results
 
 @app.get("/table/{variable}/{source}/{model}/{region}/{years}/{season}")
 async def table(
